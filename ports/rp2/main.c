@@ -76,6 +76,9 @@ int main(int argc, char **argv) {
     // This is a tickless port, interrupts should always trigger SEV.
     SCB->SCR |= SCB_SCR_SEVONPEND_Msk;
 
+    // Hook for setting up anything that needs to be super early in the bootup process
+    MICROPY_BOARD_STARTUP();
+
     #if MICROPY_HW_ENABLE_UART_REPL
     bi_decl(bi_program_feature("UART REPL"))
     setup_default_uart();
@@ -146,6 +149,9 @@ int main(int argc, char **argv) {
     }
     #endif
 
+    // Hook for setting up anything that can wait until after other hardware features are initialised
+    MICROPY_BOARD_EARLY_INIT();
+
     for (;;) {
 
         // Initialise MicroPython runtime.
@@ -168,6 +174,9 @@ int main(int argc, char **argv) {
         #if MICROPY_PY_LWIP
         mod_network_lwip_init();
         #endif
+
+        // Hook for setting up anything that should follow the MicroPy runtime but be prior to _boot.py
+        MICROPY_BOARD_LATE_INIT();
 
         // Execute _boot.py to set up the filesystem.
         #if MICROPY_VFS_FAT && MICROPY_HW_USB_MSC
@@ -207,6 +216,10 @@ int main(int argc, char **argv) {
 
     soft_reset_exit:
         mp_printf(MP_PYTHON_PRINTER, "MPY: soft reboot\n");
+
+        // Hook for resetting anything immediately following a soft reboot command
+        MICROPY_BOARD_EARLY_RESET();
+
         #if MICROPY_PY_NETWORK
         mod_network_deinit();
         #endif
@@ -227,6 +240,9 @@ int main(int argc, char **argv) {
 
         gc_sweep_all();
         mp_deinit();
+
+        // Hook for resetting anything after the MicroPy runtime has been deinitialised
+        MICROPY_BOARD_LATE_RESET();
     }
 
     return 0;
