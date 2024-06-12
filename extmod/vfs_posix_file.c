@@ -160,6 +160,17 @@ static mp_uint_t vfs_posix_file_ioctl(mp_obj_t o_in, mp_uint_t request, uintptr_
             #if defined(__APPLE__)
             #define VFS_POSIX_STREAM_STDIO_ERR_CATCH (err == EINVAL || err == ENOTSUP)
             #elif defined(_MSC_VER)
+            // In debug builds _commit will generate a debug report via _ASSERTE when called with
+            // non-redirected stdin/stdout/stderr handles because FlushFileBuffers, which it calls
+            // internally, will fail since console output is not buffered. In release builds this also
+            // fails, but merely returns an error which is handled appropriately below.
+            // The check for the handle being stdin/stdout/stderr is added explicitly because according to
+            // the documentation _isatty is also true for serial ports for instance.
+            #ifdef _DEBUG
+            if ((o->fd == STDIN_FILENO || o->fd == STDOUT_FILENO || o->fd == STDERR_FILENO) && _isatty(o->fd)) {
+                return 0;
+            }
+            #endif
             #define VFS_POSIX_STREAM_STDIO_ERR_CATCH (err == EINVAL || err == EBADF)
             #else
             #define VFS_POSIX_STREAM_STDIO_ERR_CATCH (err == EINVAL)
