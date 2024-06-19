@@ -77,7 +77,7 @@ Functions and types
       In MicroPython, `byteorder` parameter must be positional (this is
       compatible with CPython).
 
-   .. method:: to_bytes(size, byteorder)
+   .. method:: to_bytes(size, byteorder, / signed=False)
 
       In MicroPython, `byteorder` parameter must be positional (this is
       compatible with CPython).
