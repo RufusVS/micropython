@@ -37,6 +37,8 @@
 void mp_usbd_task(void) {
     if (MICROPY_HW_USBD_TASK_CAN_RUN()) {
         tud_task_ext(0, false);
+    } else {
+        mp_usbd_schedule_task();
     }
 }
 

@@ -486,10 +486,15 @@ static void mp_usbd_disconnect(mp_obj_usb_device_t *usbd) {
     }
 }
 
-// Thjs callback is queued by mp_usbd_schedule_task() to process USB later.
+// This callback is queued by mp_usbd_schedule_task() to process USB later.
 void mp_usbd_task_callback(mp_sched_node_t *node) {
-    if (tud_inited() && !in_usbd_task && MICROPY_HW_USBD_TASK_CAN_RUN()) {
-        mp_usbd_task_inner();
+    if (tud_inited() && !in_usbd_task) {
+        if (MICROPY_HW_USBD_TASK_CAN_RUN()) {
+            mp_usbd_task_inner();
+        } else {
+            // Get the scheduler to call again later, when we hopefully can run
+            mp_usbd_schedule_task();
+        }
     }
     // If in_usbd_task is set, it means something else has already manually called
     // mp_usbd_task() (most likely: C-based USB-CDC serial port). Now the MP
