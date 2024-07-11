@@ -488,7 +488,7 @@ static void mp_usbd_disconnect(mp_obj_usb_device_t *usbd) {
 
 // Thjs callback is queued by mp_usbd_schedule_task() to process USB later.
 void mp_usbd_task_callback(mp_sched_node_t *node) {
-    if (tud_inited() && !in_usbd_task) {
+    if (tud_inited() && !in_usbd_task && MICROPY_HW_USBD_TASK_CAN_RUN()) {
         mp_usbd_task_inner();
     }
     // If in_usbd_task is set, it means something else has already manually called
@@ -501,6 +501,9 @@ void mp_usbd_task_callback(mp_sched_node_t *node) {
 // Task function can be called manually to force processing of USB events
 // (mostly from USB-CDC serial port when blocking.)
 void mp_usbd_task(void) {
+    if (!MICROPY_HW_USBD_TASK_CAN_RUN()) {
+        return; // The port can't run the USB task from here (i.e. wrong CPU)
+    }
     if (in_usbd_task) {
         // If this exception triggers, it means a USB callback tried to do
         // something that itself became blocked on TinyUSB (most likely: read or
