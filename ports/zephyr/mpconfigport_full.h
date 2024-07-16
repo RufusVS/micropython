@@ -114,8 +114,8 @@
 #define MICROPY_COMP_DOUBLE_TUPLE_ASSIGN (1)
 
 #define MICROPY_PY_THREAD                   (1)
-#define MICROPY_PY_THREAD_GIL               (0)
-#define MICROPY_PY_THREAD_GIL_VM_DIVISOR    (0)
+#define MICROPY_PY_THREAD_GIL               (1)
+#define MICROPY_PY_THREAD_GIL_VM_DIVISOR    (32)
 
 extern void mp_hal_signal_event(void);
 #define MICROPY_SCHED_HOOK_SCHEDULED mp_hal_signal_event()
@@ -148,10 +148,9 @@ typedef long mp_off_t;
 #define MICROPY_EVENT_POLL_HOOK \
     do { \
         extern void mp_handle_pending(bool); \
-        extern void mp_hal_main_sem_take(); \
         mp_handle_pending(true); \
         MP_THREAD_GIL_EXIT(); \
-        mp_hal_main_sem_take(); \
+        k_yield(); \
         MP_THREAD_GIL_ENTER(); \
     } while (0);
 #else
