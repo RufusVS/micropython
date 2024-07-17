@@ -37,7 +37,7 @@
 
 #if MICROPY_PY_THREAD
 
-#define DEBUG_printf(...) printk("_thread: " __VA_ARGS__)
+#define DEBUG_printf(...)   // printk("_thread: " __VA_ARGS__)
 
 #define MP_THREAD_MIN_STACK_SIZE                        (4 * 1024)
 #define MP_THREAD_DEFAULT_STACK_SIZE                    (MP_THREAD_MIN_STACK_SIZE + 1024)
@@ -101,7 +101,7 @@ void mp_thread_gc_others(void) {
     k_thread_foreach(mp_thread_iterate_threads_cb, NULL);
     // unlink non-alive thread nodes from the list
     mp_thread_t *prev = NULL;
-    for (mp_thread_t *th = thread; th != NULL; th = th->next) {
+    for (mp_thread_t *th = thread; th != NULL; prev = th, th = th->next) {
         if ((th->status == MP_THREAD_STATUS_FINISHED) && !th->alive) {
             if (prev != NULL) {
                 prev->next = th->next;
