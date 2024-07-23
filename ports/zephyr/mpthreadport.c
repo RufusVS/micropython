@@ -50,12 +50,17 @@ typedef enum {
     MP_THREAD_STATUS_FINISHED,
 } mp_thread_status_t;
 
+typedef struct _mp_thread_slot_t {
+    bool used;
+} mp_thread_stack_slot_t;
+
 // this structure forms a linked list, one node per active thread
 typedef struct _mp_thread_t {
     k_tid_t id;                 // system id of thread (this is actually a pointer to z_thread below)
     struct k_thread z_thread;   // the zephyr thread object
     mp_thread_status_t status;  // whether the thread is created, ready, or finished
-    int alive;                  // whether the thread is still visible by the kernel
+    int16_t alive;              // whether the thread is still visible by the kernel
+    int16_t slot;               // slot index in the stack pool
     void *arg;                  // thread Python args, a GC root pointer
     void *stack;                // pointer to the stack
     size_t stack_len;           // number of words in the stack
@@ -66,16 +71,21 @@ typedef struct _mp_thread_t {
 static mp_thread_mutex_t thread_mutex;
 static mp_thread_t thread_entry0;
 static mp_thread_t *thread = NULL; // root pointer, handled by mp_thread_gc_others
-static uint32_t mp_thread_counter;
+static uint8_t mp_thread_counter;
+static mp_thread_stack_slot_t stack_slot[MP_THREAD_MAXIMUM_USER_THREADS];
+static void *(*ext_thread_entry)(void *);
 
 K_THREAD_STACK_ARRAY_DEFINE(mp_thread_stack_array, MP_THREAD_MAXIMUM_USER_THREADS, MP_THREAD_DEFAULT_STACK_SIZE);
 
 
 static void mp_thread_iterate_threads_cb(const struct k_thread *thread, void *user_data);
+static int32_t mp_thread_find_stack_slot(void);
+
 
 
 void mp_thread_init(void *stack, uint32_t stack_len) {
     mp_thread_set_state(&mp_state_ctx.thread);
+    ext_thread_entry = NULL;
     // create the first entry in the linked list of all threads
     thread_entry0.id = k_current_get();
     thread_entry0.status = MP_THREAD_STATUS_READY;
@@ -109,6 +119,7 @@ void mp_thread_gc_others(void) {
                 // move the start pointer
                 thread = th->next;
             }
+            stack_slot[th->slot].used = false;
             mp_thread_counter--;
             DEBUG_printf("Collecting thread %s\n", k_thread_name_get(th->id));
             // The "th" memory will eventually be reclaimed by the GC
@@ -154,8 +165,6 @@ void mp_thread_start(void) {
     mp_thread_mutex_unlock(&thread_mutex);
 }
 
-static void *(*ext_thread_entry)(void *) = NULL;
-
 static void zephyr_entry(void *arg1, void *arg2, void *arg3) {
     (void)arg2;
     (void)arg3;
@@ -184,9 +193,10 @@ mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_s
 
     mp_thread_mutex_lock(&thread_mutex, 1);
 
-    if (mp_thread_counter < MP_THREAD_MAXIMUM_USER_THREADS) {
+    int32_t _slot = mp_thread_find_stack_slot();
+    if (_slot >= 0) {
         // create thread
-        th->id = k_thread_create(&th->z_thread, mp_thread_stack_array[mp_thread_counter], K_THREAD_STACK_SIZEOF(mp_thread_stack_array[mp_thread_counter]),
+        th->id = k_thread_create(&th->z_thread, mp_thread_stack_array[_slot], K_THREAD_STACK_SIZEOF(mp_thread_stack_array[_slot]),
             zephyr_entry, arg, NULL, NULL, priority, 0, K_NO_WAIT);
 
         if (th->id == NULL) {
@@ -204,12 +214,14 @@ mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_s
     // add thread to linked list of all threads
     th->status = MP_THREAD_STATUS_CREATED;
     th->alive = 0;
+    th->slot = _slot;
     th->arg = arg;
-    th->stack = mp_thread_stack_array[mp_thread_counter];
+    th->stack = mp_thread_stack_array[_slot];
     th->stack_len = MP_THREAD_DEFAULT_STACK_SIZE / sizeof(uintptr_t);
     th->next = thread;
     thread = th;
 
+    stack_slot[_slot].used = true;
     mp_thread_counter++;
 
     // adjust the stack_size to provide room to recover from hitting the limit
@@ -276,6 +288,15 @@ static void mp_thread_iterate_threads_cb(const struct k_thread *z_thread, void *
             DEBUG_printf("Found thread %s\n", k_thread_name_get(th->id));
         }
     }
+}
+
+static int32_t mp_thread_find_stack_slot(void) {
+    for (int i = 0; i < MP_THREAD_MAXIMUM_USER_THREADS; i++) {
+        if (!stack_slot[i].used) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 #endif // MICROPY_PY_THREAD
