@@ -66,7 +66,7 @@ To build for QEMU instead:
 To build any board with the `_thread` module enabled, 
 add `-DOVERLAY_CONFIG=thread.conf`, for instance:
 
-$ west build -b frdm_k64f ~/micropython/ports/zephyr -DOVERLAY_CONFIG=thread.conf
+    $ west build -b frdm_k64f ~/micropython/ports/zephyr -DOVERLAY_CONFIG=thread.conf
 
 Consult the Zephyr documentation above for the list of
 supported boards.  Board configuration files appearing in `ports/zephyr/boards/`

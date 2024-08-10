@@ -106,12 +106,18 @@ void mp_thread_init(void *stack, uint32_t stack_len) {
 
 void mp_thread_gc_others(void) {
 
+    mp_thread_t *prev = NULL;
+
+    if (thread == NULL) {
+        // threading not yet initialised
+        return;
+    }
+
     mp_thread_mutex_lock(&thread_mutex, 1);
     // get the kernel to iterate over all the existing threads
     k_thread_foreach(mp_thread_iterate_threads_cb, NULL);
-    // unlink non-alive thread nodes from the list
-    mp_thread_t *prev = NULL;
-    for (mp_thread_t *th = thread; th != NULL; prev = th, th = th->next) {
+    for (mp_thread_t *th = thread; th != NULL; th = th->next) {
+        // unlink non-alive thread nodes from the list
         if ((th->status == MP_THREAD_STATUS_FINISHED) && !th->alive) {
             if (prev != NULL) {
                 prev->next = th->next;
@@ -125,6 +131,7 @@ void mp_thread_gc_others(void) {
             // The "th" memory will eventually be reclaimed by the GC
         } else {
             th->alive = 0;
+            prev = th;
         }
     }
 
@@ -293,6 +300,7 @@ static void mp_thread_iterate_threads_cb(const struct k_thread *z_thread, void *
 static int32_t mp_thread_find_stack_slot(void) {
     for (int i = 0; i < MP_THREAD_MAXIMUM_USER_THREADS; i++) {
         if (!stack_slot[i].used) {
+            DEBUG_printf("Allocating stack slot %d\n", i);
             return i;
         }
     }
