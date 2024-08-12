@@ -73,7 +73,6 @@ static mp_thread_t thread_entry0;
 static mp_thread_t *thread = NULL; // root pointer, handled by mp_thread_gc_others
 static uint8_t mp_thread_counter;
 static mp_thread_stack_slot_t stack_slot[MP_THREAD_MAXIMUM_USER_THREADS];
-static void *(*ext_thread_entry)(void *);
 
 K_THREAD_STACK_ARRAY_DEFINE(mp_thread_stack_array, MP_THREAD_MAXIMUM_USER_THREADS, MP_THREAD_DEFAULT_STACK_SIZE);
 
@@ -85,7 +84,6 @@ static int32_t mp_thread_find_stack_slot(void);
 
 void mp_thread_init(void *stack, uint32_t stack_len) {
     mp_thread_set_state(&mp_state_ctx.thread);
-    ext_thread_entry = NULL;
     // create the first entry in the linked list of all threads
     thread_entry0.id = k_current_get();
     thread_entry0.status = MP_THREAD_STATUS_READY;
@@ -173,10 +171,12 @@ void mp_thread_start(void) {
 }
 
 static void zephyr_entry(void *arg1, void *arg2, void *arg3) {
-    (void)arg2;
     (void)arg3;
-    if (ext_thread_entry) {
-        ext_thread_entry(arg1);
+
+    // arg1 contains the python thread entry point
+    if (arg1) {
+        void *(*entry)(void *) = arg1;
+        entry(arg2);
     }
     k_thread_abort(k_current_get());
     for (;;) {;
@@ -185,15 +185,15 @@ static void zephyr_entry(void *arg1, void *arg2, void *arg3) {
 
 mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_size, int priority, char *name) {
 
-    // store thread entry function into a global variable so we can access it
-    ext_thread_entry = entry;
-
     // TODO: we need to support for CONFIG_DYNAMIC_THREAD in order to dynamically create allocate the stack of a thread
     // if (*stack_size == 0) {
     //     *stack_size = MP_THREAD_DEFAULT_STACK_SIZE; // default stack size
     // } else if (*stack_size < MP_THREAD_MIN_STACK_SIZE) {
     //     *stack_size = MP_THREAD_MIN_STACK_SIZE; // minimum stack size
     // }
+
+    // in case some threads have finished but their stack has not been collected yet
+    mp_thread_gc_others();
 
     // Allocate linked-list node (must be outside thread_mutex lock)
     mp_thread_t *th = m_new_obj(mp_thread_t);
@@ -204,7 +204,7 @@ mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_s
     if (_slot >= 0) {
         // create thread
         th->id = k_thread_create(&th->z_thread, mp_thread_stack_array[_slot], K_THREAD_STACK_SIZEOF(mp_thread_stack_array[_slot]),
-            zephyr_entry, arg, NULL, NULL, priority, 0, K_NO_WAIT);
+            zephyr_entry, entry, arg, NULL, priority, 0, K_NO_WAIT);
 
         if (th->id == NULL) {
             mp_thread_mutex_unlock(&thread_mutex);

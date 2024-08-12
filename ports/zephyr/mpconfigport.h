@@ -43,9 +43,14 @@
 #define MICROPY_HELPER_REPL         (1)
 #define MICROPY_REPL_AUTO_INDENT    (1)
 #define MICROPY_KBD_EXCEPTION       (1)
-#define MICROPY_CPYTHON_COMPAT      (0)
 #define MICROPY_PY_ASYNC_AWAIT      (0)
+#ifdef CONFIG_THREAD_CUSTOM_DATA            // this one enables the _thread module
+#define MICROPY_CPYTHON_COMPAT      (1)
+#define MICROPY_PY_ATTRTUPLE        (1)
+#else
+#define MICROPY_CPYTHON_COMPAT      (0)
 #define MICROPY_PY_ATTRTUPLE        (0)
+#endif
 #define MICROPY_PY_BUILTINS_BYTES_HEX (1)
 #define MICROPY_PY_BUILTINS_ENUMERATE (0)
 #define MICROPY_PY_BUILTINS_FILTER  (0)
