@@ -112,7 +112,9 @@ void mp_thread_gc_others(void) {
     }
 
     mp_thread_mutex_lock(&thread_mutex, 1);
+
     // get the kernel to iterate over all the existing threads
+    DEBUG_printf("Iterating...\n");
     k_thread_foreach(mp_thread_iterate_threads_cb, NULL);
     for (mp_thread_t *th = thread; th != NULL; th = th->next) {
         // unlink non-alive thread nodes from the list
@@ -133,9 +135,13 @@ void mp_thread_gc_others(void) {
         }
     }
 
+    DEBUG_printf("mp_thread_gc_others from %s\n", k_thread_name_get(k_current_get()));
+
     for (mp_thread_t *th = thread; th != NULL; th = th->next) {
+        DEBUG_printf("%s\n", k_thread_name_get(th->id));
         gc_collect_root((void **)&th, 1);
-        gc_collect_root(&th->arg, 1); // probably not needed
+        gc_collect_root(&th->arg, 1);
+        // gc_collect_root(&th->stack, 1);  // will be needed later when the stack is allocated from the gc heap
         if (th->id == k_current_get()) {
             continue;
         }
@@ -184,7 +190,6 @@ static void zephyr_entry(void *arg1, void *arg2, void *arg3) {
 }
 
 mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_size, int priority, char *name) {
-
     // TODO: we need to support for CONFIG_DYNAMIC_THREAD in order to dynamically create allocate the stack of a thread
     // if (*stack_size == 0) {
     //     *stack_size = MP_THREAD_DEFAULT_STACK_SIZE; // default stack size
@@ -193,7 +198,7 @@ mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_s
     // }
 
     // in case some threads have finished but their stack has not been collected yet
-    mp_thread_gc_others();
+    gc_collect();
 
     // Allocate linked-list node (must be outside thread_mutex lock)
     mp_thread_t *th = m_new_obj(mp_thread_t);
@@ -223,8 +228,8 @@ mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_s
     th->alive = 0;
     th->slot = _slot;
     th->arg = arg;
-    th->stack = mp_thread_stack_array[_slot];
-    th->stack_len = MP_THREAD_DEFAULT_STACK_SIZE / sizeof(uintptr_t);
+    th->stack = (void *)th->z_thread.stack_info.start;
+    th->stack_len = th->z_thread.stack_info.size / sizeof(uintptr_t);
     th->next = thread;
     thread = th;
 
@@ -232,7 +237,7 @@ mp_uint_t mp_thread_create_ex(void *(*entry)(void *), void *arg, size_t *stack_s
     mp_thread_counter++;
 
     // adjust the stack_size to provide room to recover from hitting the limit
-    *stack_size = MP_THREAD_DEFAULT_STACK_SIZE - 1024;
+    *stack_size = th->z_thread.stack_info.size - 1024;
 
     mp_thread_mutex_unlock(&thread_mutex);
 
@@ -288,7 +293,6 @@ void mp_thread_deinit(void) {
 }
 
 static void mp_thread_iterate_threads_cb(const struct k_thread *z_thread, void *user_data) {
-    DEBUG_printf("Iterating...\n");
     for (mp_thread_t *th = thread; th != NULL; th = th->next) {
         if (th->id == (struct k_thread *)z_thread) {
             th->alive = 1;

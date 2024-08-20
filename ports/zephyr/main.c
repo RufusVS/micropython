@@ -122,10 +122,11 @@ static void vfs_init(void) {
 #endif // MICROPY_VFS
 
 int real_main(void) {
-    volatile int stack_dummy;
+    volatile int stack_dummy = 0;
 
     #if MICROPY_PY_THREAD
-    mp_thread_init((void *)&stack_dummy, (CONFIG_MAIN_STACK_SIZE - 128) / sizeof(uintptr_t));
+    struct k_thread *z_thread = (struct k_thread *)k_current_get();
+    mp_thread_init((void *)z_thread->stack_info.start, z_thread->stack_info.size / sizeof(uintptr_t));
     #endif
 
     init_zephyr();
