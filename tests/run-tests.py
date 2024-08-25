@@ -1153,7 +1153,10 @@ the last matching regex is used:
                     raise ValueError("--target=qemu-riscv must be used with --write-exp")
                 # Generate expected output files for qemu run.
                 # This list should match the test_dirs tuple in tinytest-codegen.py.
-                test_dirs += ("float",)
+                test_dirs += (
+                    "float",
+                    "inlineasm/rv32imc",
+                )
             elif args.target == "webassembly":
                 test_dirs += ("float", "ports/webassembly")
         else:
