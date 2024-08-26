@@ -1,6 +1,6 @@
 # Port-specific test directories.
 
-test_dirs.update(())
+test_dirs.update(("inlineasm/rv32imc",))
 
 # Port-specific tests exclusion list.
 
