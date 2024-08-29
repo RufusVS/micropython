@@ -14,13 +14,17 @@ QSTR_DEFS = qstrdefsport.h
 
 # MicroPython feature configurations
 MICROPY_ROM_TEXT_COMPRESSION ?= 1
+
+ifeq ($(QEMU_ARCH),arm)
 FROZEN_MANIFEST ?= "freeze('test-frzmpy')"
+endif
+ifeq ($(QEMU_ARCH),riscv32)
+FROZEN_MANIFEST ?= "freeze('test-frzmpy', ('frozen_const.py', 'frozen_viper.py', 'native_frozen_align.py'))"
+endif
 
 # include py core make definitions
 include $(TOP)/py/py.mk
 include $(TOP)/extmod/extmod.mk
-
-CROSS_COMPILE ?= arm-none-eabi-
 
 QEMU_SYSTEM = qemu-system-$(QEMU_ARCH)
 QEMU_ARGS += -machine $(QEMU_MACHINE) -nographic -monitor null -semihosting
@@ -42,6 +46,10 @@ else
 COPT += -Os -DNDEBUG
 endif
 
+ifeq ($(QEMU_ARCH),arm)
+
+CROSS_COMPILE ?= arm-none-eabi-
+
 ## With CoudeSourcery it's actually a little different, you just need `-T generic-m-hosted.ld`.
 ## Although for some reason `$(LD)` will not find that linker script, it works with `$(CC)`.
 ## It turns out that this is specific to CoudeSourcery, and ARM version of GCC ships something
@@ -51,16 +59,69 @@ endif
 LDFLAGS= -T $(LDSCRIPT) --gc-sections -Map=$(@:.elf=.map)
 LIBS = $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 
-SRC_C = \
+SRC_C += \
+	mcu/arm/startup.c \
+	shared/runtime/semihosting_arm.c \
+
+endif
+
+ifeq ($(QEMU_ARCH),riscv32)
+
+CROSS_COMPILE ?= riscv64-unknown-elf-
+
+GCC_VERSION = $(word 1, $(subst ., , $(shell $(CC) -dumpversion)))
+
+RV32_ABI = ilp32
+
+QEMU_ARGS += -bios none
+
+# GCC 10 and lower do not recognise the Zicsr extension in the
+# architecture name.  "Make" unfortunately does not provide any simple way
+# to perform numeric comparisons, so to keep things simple we assume that
+# GCC is at least version 10 for the time being.
+ifeq ($(GCC_VERSION),10)
+RV32_ARCH ?= rv32imac
+else
+# Recent GCC versions explicitly require to declare extensions.
+RV32_ARCH ?= rv32imac_zicsr
+endif
+
+# If Picolibc is available then select it explicitly.  Ubuntu 22.04 ships its
+# bare metal RISC-V toolchain with Picolibc rather than Newlib, and the default
+# is "nosys" so a value must be provided.  To avoid having per-distro
+# workarounds, always select Picolibc if available.
+PICOLIBC_SPECS = $(shell $(CC) --print-file-name=picolibc.specs)
+ifeq ($(PICOLIBC_SPECS),picolibc.specs)
+# Picolibc was not found.
+SPECS_FRAGMENT =
+else
+SPECS_FRAGMENT = --specs=$(PICOLIBC_SPECS)
+CFLAGS += $(SPECS_FRAGMENT)
+endif
+
+LD = $(CC)
+
+AFLAGS += -mabi=$(RV32_ABI) -march=$(RV32_ARCH)
+CFLAGS += $(AFLAGS)
+LDFLAGS += -mabi=$(RV32_ABI) -march=$(RV32_ARCH) -T $(LDSCRIPT) -Wl,-EL
+LDFLAGS += $(SPECS_FRAGMENT) -Wl,--gc-sections -Wl,-Map=$(@:.elf=.map)
+
+SRC_C += \
+	mcu/rv32/interrupts.c \
+	mcu/rv32/startup.c \
+
+SRC_BOARD_O += mcu/rv32/entrypoint.o
+
+endif
+
+SRC_C += \
 	main.c \
-	startup.c \
 	uart.c \
 	mphalport.c \
 	shared/libc/string0.c \
 	shared/readline/readline.c \
 	shared/runtime/interrupt_char.c \
 	shared/runtime/pyexec.c \
-	shared/runtime/semihosting_arm.c \
 	shared/runtime/stdout_helpers.c \
 	shared/runtime/sys_stdio_mphal.c \
 
@@ -85,6 +146,11 @@ repl: $(BUILD)/firmware.elf
 .PHONY: run
 run: $(BUILD)/firmware.elf
 	$(QEMU_SYSTEM) $(QEMU_ARGS) -serial pty -kernel $<
+
+# `make debug` will block QEMU until a debugger is connected to port 1234.
+.PHONY: debug
+debug: $(BUILD)/firmware.elf
+	$(QEMU_SYSTEM) $(QEMU_ARGS) -serial mon:stdio -S -s -kernel $<
 
 .PHONY: test
 test: $(BUILD)/firmware.elf
