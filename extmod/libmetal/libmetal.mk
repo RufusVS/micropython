@@ -10,7 +10,7 @@ $(BUILD)/openamp: $(BUILD)
 $(BUILD)/openamp/metal: $(BUILD)/openamp
 	$(MKDIR) -p $@
 
-$(BUILD)/openamp/metal/config.h: $(BUILD)/openamp/metal $(TOP)/$(LIBMETAL_DIR)/lib/config.h
+$(BUILD)/openamp/metal/config.h: | $(BUILD)/openamp/metal $(TOP)/$(LIBMETAL_DIR)/lib/config.h
 	@$(ECHO) "GEN $@"
 	@for file in $(TOP)/$(LIBMETAL_DIR)/lib/*.c $(TOP)/$(LIBMETAL_DIR)/lib/*.h; do $(SED) -e "s/@PROJECT_SYSTEM@/micropython/g" -e "s/@PROJECT_PROCESSOR@/arm/g" $$file > $(BUILD)/openamp/metal/$$(basename $$file); done
 	$(MKDIR) -p $(BUILD)/openamp/metal/processor/arm
