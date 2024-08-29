@@ -248,9 +248,11 @@ function ci_powerpc_build {
 
 function ci_qemu_arm_setup {
     ci_gcc_arm_setup
+    ci_gcc_riscv_setup
     sudo apt-get update
     sudo apt-get install qemu-system
     qemu-system-arm --version
+    qemu-system-riscv32 --version
 }
 
 function ci_qemu_arm_build {
@@ -259,26 +261,8 @@ function ci_qemu_arm_build {
     make ${MAKEOPTS} -C ports/qemu-arm CFLAGS_EXTRA=-DMP_ENDIANNESS_BIG=1
     make ${MAKEOPTS} -C ports/qemu-arm clean
     make ${MAKEOPTS} -C ports/qemu-arm test
-    make ${MAKEOPTS} -C ports/qemu-arm BOARD=sabrelite test
-}
-
-########################################################################################
-# ports/qemu-riscv
-
-function ci_qemu_riscv_setup {
-    ci_gcc_riscv_setup
-    sudo apt-get update
-    sudo apt-get install qemu-system
-    qemu-system-riscv32 --version
-}
-
-function ci_qemu_riscv_build {
-    make ${MAKEOPTS} -C mpy-cross
-    make ${MAKEOPTS} -C ports/qemu-riscv submodules
-    make ${MAKEOPTS} -C ports/qemu-riscv
-    make ${MAKEOPTS} -C ports/qemu-riscv clean
-    make ${MAKEOPTS} -C ports/qemu-riscv -f Makefile.test submodules
-    make ${MAKEOPTS} -C ports/qemu-riscv -f Makefile.test test
+    make ${MAKEOPTS} -C ports/qemu-arm BOARD=SABRELITE test
+    make ${MAKEOPTS} -C ports/qemu-arm BOARD=VIRT_RV32 test
 }
 
 ########################################################################################
