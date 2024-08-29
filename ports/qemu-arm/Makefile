@@ -75,11 +75,8 @@ RV32_ABI = ilp32
 
 QEMU_ARGS += -bios none
 
-# GCC 10 and lower do not recognise the Zicsr extension in the
-# architecture name.  "Make" unfortunately does not provide any simple way
-# to perform numeric comparisons, so to keep things simple we assume that
-# GCC is at least version 10 for the time being.
-ifeq ($(GCC_VERSION),10)
+# GCC 10 and lower do not recognise the Zicsr extension in the architecture name.
+ifeq ($(shell test $(GCC_VERSION) -le 10; echo $$?),0)
 RV32_ARCH ?= rv32imac
 else
 # Recent GCC versions explicitly require to declare extensions.
